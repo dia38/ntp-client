@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include "ntp-client/NTPClient.h"
-#include "mbed.h"
+#include <NTPClient.h>
+#include <mbed.h>
 
 NTPClient::NTPClient(NetworkInterface *interface)
     : iface(interface), nist_server_address(NTP_DEFULT_NIST_SERVER_ADDRESS), nist_server_port(NTP_DEFULT_NIST_SERVER_PORT) {
@@ -26,70 +26,67 @@ void NTPClient::set_server(const char* server, int port) {
     nist_server_port = port;
 }
 
-int NTPClient::get_timestamp(time_t &timestamp, int timeout) {
+nsapi_error_t NTPClient::get_timestamp(time_t &timestamp, int timeout) {
     const time_t TIME1970 = (time_t)2208988800UL;
     int ntp_send_values[12] = {0};
     int ntp_recv_values[12] = {0};
+    nsapi_error_t result = NSAPI_ERROR_UNSUPPORTED;
 
     SocketAddress nist;
 
     if (iface) {
-        int ret_gethostbyname = iface->gethostbyname(nist_server_address, &nist);
+        char ifacename[NSAPI_INTERFACE_NAME_MAX_SIZE];
 
-        if (ret_gethostbyname < 0) {
-            // Network error on DNS lookup
-            return ret_gethostbyname;
-        }
+        iface->get_interface_name(ifacename);
 
-        nist.set_port(nist_server_port);
+        int ret_gethostbyname = iface->gethostbyname(nist_server_address, &nist, NSAPI_UNSPEC, ifacename);
 
-        memset(ntp_send_values, 0x00, sizeof(ntp_send_values));
-        ntp_send_values[0] = '\x1b';
+        if (ret_gethostbyname == NSAPI_ERROR_OK) {
+            nist.set_port(nist_server_port);
 
-        memset(ntp_recv_values, 0x00, sizeof(ntp_recv_values));
+            memset(ntp_send_values, 0x00, sizeof(ntp_send_values));
+            ntp_send_values[0] = '\x1b';
 
-        UDPSocket sock;
-        sock.open(iface);
-        sock.set_timeout(timeout);
+            memset(ntp_recv_values, 0x00, sizeof(ntp_recv_values));
 
-        sock.sendto(nist, (void*)ntp_send_values, sizeof(ntp_send_values));
+            UDPSocket sock;
+            result = sock.open(iface);
 
-        SocketAddress source;
-        const int n = sock.recvfrom(&source, (void*)ntp_recv_values, sizeof(ntp_recv_values));
+            if (result == NSAPI_ERROR_OK)
+            {
+                sock.setsockopt(0, 0, 0, 0);
+                sock.set_timeout(timeout);
 
-        if (n > 10) {
-            timestamp = ntohl(ntp_recv_values[10]) - TIME1970;
-            return 0;
-        } else {
-            if (n < 0) {
-                // Network error
-                return n;
+                nsapi_size_or_error_t res_send = sock.sendto(nist, (void*)ntp_send_values, sizeof(ntp_send_values));
 
-            } else {
-                // No or partial data returned
-                return -1;
+                if (res_send < 0)
+                {
+                    result = res_send;
+                }
+                else
+                {
+                    SocketAddress source;
+                    nsapi_size_or_error_t n = sock.recvfrom(&source, (void*)ntp_recv_values, sizeof(ntp_recv_values));
+
+                    if (n < 0)
+                    {
+                        result = n;
+                    }
+                    else if (n > 10) {
+                        timestamp = ntohl(ntp_recv_values[10]) - TIME1970;
+                        result = NSAPI_ERROR_OK;
+                    } else {
+                        result = NSAPI_ERROR_TIMEOUT;
+                    }
+                }
             }
         }
-
-    } else {
-        // No network interface
-        return -2;
     }
+
+    return result;
 }
 
-time_t NTPClient::get_timestamp(int timeout) {
-    time_t timestamp;
-    int ret = get_timestamp(timestamp, timeout);
-    if (ret < 0) {
-        // This doesn't work with the ARM toolchain whose time_t is unsigned
-        // Please use the new API get_timestamp(time_t *timestamp, int timeout)
-        return ret;
-    } else {
-        return timestamp;
-    }
-}
-
-void NTPClient::network(NetworkInterface *interface) {
+void NTPClient::SetNetwork(NetworkInterface *interface) {
     iface = interface;
 }
 

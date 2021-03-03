@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-#include "mbed.h"
-#include "platform/mbed_toolchain.h"
+#include <mbed.h>
 
-#define NTP_DEFULT_NIST_SERVER_ADDRESS "2.pool.ntp.org"
-#define NTP_DEFULT_NIST_SERVER_PORT 123
+
+#define NTP_DEFAULT_NIST_SERVER_ADDRESS "2.pool.ntp.org"
+#define NTP_DEFAULT_NIST_SERVER_PORT (123)
 
 class NTPClient {
     public:
@@ -26,17 +26,13 @@ class NTPClient {
 
         void set_server(const char* server, int port);
 
-        int get_timestamp(time_t &timestamp, int timeout = 15000);
+        nsapi_error_t get_timestamp(time_t &timestamp, int timeout = 15000);
 
-        MBED_DEPRECATED(
-            "This cannot return negative error codes with ARM toolchain's unsigned time_t. "
-            "Please use int get_timestamp(time_t &timestamp, int timeout) instead")
-        time_t get_timestamp(int timeout = 15000);
-
-        void network(NetworkInterface *interface);
+        void SetNetwork(NetworkInterface *interface);
 
     private:
         NetworkInterface *iface;
+
         const char* nist_server_address;
         int nist_server_port;
 
